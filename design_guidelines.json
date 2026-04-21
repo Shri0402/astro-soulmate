@@ -1,0 +1,140 @@
+{
+  "theme_and_archetype": {
+    "domain": "Astrology Matchmaking SaaS",
+    "theme": "dark",
+    "archetype": "5 (Jewel & Luxury)",
+    "vibe": "Premium, mystical, authoritative, deeply rooted in Vedic traditions but executed with modern high-end SaaS polish."
+  },
+  "colors": {
+    "background": {
+      "base": "#0A0305",
+      "surface": "#1A0810",
+      "card": "#2A0E18"
+    },
+    "brand": {
+      "primary": "#D4AF37",
+      "primary_hover": "#B88A2A",
+      "secondary": "#7A1E2C",
+      "accent": "#CFAE3D"
+    },
+    "text": {
+      "primary": "#F3E6C6",
+      "secondary": "#C2A3A8",
+      "muted": "#8A6B72",
+      "inverse": "#0A0305"
+    },
+    "status": {
+      "success": "#1B4332",
+      "warning": "#B88A2A",
+      "error": "#5A1725",
+      "lock_overlay": "rgba(10, 3, 5, 0.75)"
+    },
+    "gradients": {
+      "gold_shimmer": "linear-gradient(90deg, transparent, rgba(212,175,55,0.2), transparent)",
+      "celestial_fade": "linear-gradient(180deg, rgba(42,14,24,0) 0%, #0A0305 100%)"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "headings": "'Cormorant Garamond', serif",
+      "body": "'Outfit', sans-serif",
+      "monospace": "'Space Mono', monospace"
+    },
+    "scale": {
+      "h1": "text-5xl sm:text-6xl tracking-tighter leading-none",
+      "h2": "text-3xl sm:text-4xl tracking-tight leading-none",
+      "h3": "text-2xl sm:text-3xl tracking-tight",
+      "h4": "text-xl sm:text-2xl",
+      "body_lg": "text-lg leading-relaxed",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm uppercase tracking-[0.2em]"
+    },
+    "rules": [
+      "Headings must use font-light or font-medium, never font-black.",
+      "Overlines/Labels must be uppercase with wide spacing tracking-[0.2em].",
+      "No Inter, Roboto, or standard sans-serif for headings."
+    ]
+  },
+  "spacing_and_layout": {
+    "philosophy": "Generous Spacing (p-8 to p-12 standard). Dashboard must feel like a premium command center.",
+    "grids": {
+      "dashboard": "Control Room Mode: grid-cols-1 md:grid-cols-3 lg:grid-cols-4, tight gaps (gap-6)",
+      "marketing": "Tetris Grid: grid-cols-1 md:grid-cols-12, wide gaps (gap-12), highly asymmetrical"
+    },
+    "surfaces": {
+      "cards": "Flat dark maroon backgrounds (#2A0E18) with a 1px solid border (#D4AF37/20).",
+      "glass": "backdrop-blur-2xl bg-[#0A0305]/60 border border-[#D4AF37]/20 shadow-[0_8px_32px_rgba(212,175,55,0.05)]"
+    }
+  },
+  "components": {
+    "marketing_hero": {
+      "layout": "Asymmetrical text-left with overlapping imagery.",
+      "visuals": "Dark starry background. Overlay max opacity bg-black/50.",
+      "cta": "Gold solid button, high contrast black text."
+    },
+    "dashboard": {
+      "structure": "Sidebar or top nav with glassmorphism. Main area split into 'Your Matches' and 'High Compatibility'.",
+      "your_matches_free": "Visible cards, clear typography. Ashtakoota gauge out of 36.",
+      "high_compatibility_paywalled": "Cards wrapped in relative container. Content is blurred (blur-md). Overlay with locked icon and 'Unlock 5 connections with ₹1000' CTA."
+    },
+    "match_card": {
+      "style": "Neumorphic/Tactile variant but dark. Sharp 1px border. Ashtakoota score prominently displayed with a circular SVG gauge or elegant progress bar.",
+      "interaction": "Hover: -translate-y-1, border changes to solid Gold."
+    },
+    "kundali_report": {
+      "style": "Editorial print style. High contrast text on dark background. Generous padding.",
+      "sections": "Score summary, birth details table, Ashtakoota 8-guna breakdown chart (use Shadcn charts or simple elegant HTML progress bars), Mangal dosha section, final verdict.",
+      "pdf_button": "Prominent sticky bottom or top right CTA."
+    },
+    "waiting_room": {
+      "style": "Celestial animated state.",
+      "visuals": "Use spinning CSS astrolabe or elegant pulse animation on a zodiac graphic. Text: 'Consulting the stars...'"
+    },
+    "onboarding_form": {
+      "style": "Multi-step Shadcn forms. Stripped Vercel look. Customized inputs with maroon backgrounds and gold focus rings (focus:ring-[#D4AF37]).",
+      "inputs": "Floating labels or very clean, widely spaced labels."
+    }
+  },
+  "motion_and_interactions": {
+    "hover_states": "All cards lift slightly. Buttons get a gold shimmer effect.",
+    "paywall_unlock": "When unlocked, glass pane fades out, blur drops to 0 smoothly, gold particles or flash animation.",
+    "transitions": "Use 'transition: transform 0.3s ease, border-color 0.3s ease'."
+  },
+  "media_and_assets": {
+    "icons": {
+      "library": "@phosphor-icons/react",
+      "style": "Duotone or Thin weight for elegance."
+    },
+    "images": [
+      {
+        "category": "hero_background",
+        "url": "https://images.pexels.com/photos/34634037/pexels-photo-34634037.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Starry night sky, for the main landing hero section background. Use with heavy dark overlay."
+      },
+      {
+        "category": "marketing_concept",
+        "url": "https://images.pexels.com/photos/7222056/pexels-photo-7222056.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Astrology chart and tarot, use as secondary image in features section."
+      },
+      {
+        "category": "premium_accent",
+        "url": "https://images.pexels.com/photos/29736433/pexels-photo-29736433.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Gold zodiac necklace, use to evoke luxury and premium membership."
+      },
+      {
+        "category": "success_match_profile",
+        "url": "https://images.pexels.com/photos/32404927/pexels-photo-32404927.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Elegant Indian wedding couple at night. Use for the dashboard empty state or marketing 'success story' area."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Install required dependencies: yarn add @phosphor-icons/react framer-motion lucide-react clsx tailwind-merge",
+    "Tailwind Config: Add the custom colors (base, surface, primary, etc.) to the tailwind.config.js.",
+    "Fonts: Import 'Cormorant Garamond' and 'Outfit' from Google Fonts in index.css.",
+    "Shadcn Components: Override default Shadcn radii (use rounded-md or rounded-none) and colors to match the Jewel & Luxury archetype. Strip the Vercel styling.",
+    "Paywall Implementation: The high compatibility cards MUST be rendered but obscured using a parent div with 'backdrop-blur-md bg-[#0A0305]/70 absolute inset-0 z-10 flex flex-col items-center justify-center'. The button to unlock must be inside this overlay.",
+    "Testing IDs: Ensure all buttons, forms, and the paywall unlock CTA have 'data-testid' attributes (e.g., 'data-testid=\"unlock-premium-button\"').",
+    "PDF Generation: Ensure the Kundali report UI is cleanly printable or use a server-side library, but the UI must have a 'data-testid=\"download-pdf-button\"'."
+  ]
+}
