@@ -35,7 +35,10 @@ export default function Login() {
           className="w-full py-3 bg-[#D4AF37] text-[#0A0305] font-medium uppercase tracking-[0.2em] text-sm hover:bg-[#B88A2A] transition disabled:opacity-60">
           {loading ? "Entering..." : "Enter"}
         </button>
-        <p className="text-sm text-[#C2A3A8] mt-6 text-center">
+        <p className="text-sm text-[#C2A3A8] mt-4 text-center">
+          <Link to="/forgot-password" className="text-[#8A6B72] hover:text-[#D4AF37]" data-testid="forgot-link">Forgot password?</Link>
+        </p>
+        <p className="text-sm text-[#C2A3A8] mt-2 text-center">
           New here? <Link to="/register" className="text-[#D4AF37] hover:underline">Cast your chart</Link>
         </p>
       </form>

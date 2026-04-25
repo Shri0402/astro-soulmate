@@ -14,6 +14,8 @@ import Inbox from "./pages/Inbox";
 import Invitations from "./pages/Invitations";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 
@@ -41,6 +43,8 @@ function Shell() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoggedInRedirect><Login /></LoggedInRedirect>} />
+        <Route path="/forgot-password" element={<LoggedInRedirect><ForgotPassword /></LoggedInRedirect>} />
+        <Route path="/reset-password/:token" element={<ResetPassword />} />
         <Route path="/register" element={<LoggedInRedirect><Register /></LoggedInRedirect>} />
         <Route path="/invite/:code" element={<LoggedInRedirect><Register /></LoggedInRedirect>} />
         <Route path="/onboarding" element={<Protected needsProfile={false}><Onboarding /></Protected>} />

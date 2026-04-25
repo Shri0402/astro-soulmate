@@ -53,8 +53,100 @@ NAKSHATRA_YONI = {
     "Revati": "Elephant"
 }
 
-# Nadi: Aadi / Madhya / Antya - cycling through 27 nakshatras
-NADI_CYCLE = ["Aadi", "Madhya", "Antya"]
+# Nadi by NAKSHATRA index — canonical 9-position pattern (NOT idx % 3)
+# Each cycle of 9 nakshatras: Aadi, Madhya, Antya, Antya, Madhya, Aadi, Aadi, Madhya, Antya
+NADI_PATTERN = ["Aadi", "Madhya", "Antya", "Antya", "Madhya", "Aadi", "Aadi", "Madhya", "Antya"]
+
+
+def nadi_for(nak_idx: int) -> str:
+    return NADI_PATTERN[nak_idx % 9]
+
+
+# Yoni mortal-enemy pairs (vairya yonis) — score = 0 regardless of sex
+YONI_MORTAL_ENEMIES = frozenset({
+    frozenset({"Horse", "Buffalo"}),
+    frozenset({"Elephant", "Lion"}),
+    frozenset({"Sheep", "Monkey"}),
+    frozenset({"Serpent", "Mongoose"}),
+    frozenset({"Dog", "Deer"}),
+    frozenset({"Cat", "Rat"}),
+    frozenset({"Cow", "Tiger"}),
+})
+
+# Yoni "friendly" pairs (3 pts) — natural compatibility per classical sources
+YONI_FRIENDS = frozenset({
+    frozenset({"Horse", "Sheep"}),
+    frozenset({"Elephant", "Buffalo"}),
+    frozenset({"Sheep", "Cow"}),
+    frozenset({"Cow", "Buffalo"}),
+    frozenset({"Cow", "Deer"}),
+    frozenset({"Dog", "Monkey"}),
+    frozenset({"Cat", "Monkey"}),
+    frozenset({"Tiger", "Lion"}),
+    frozenset({"Mongoose", "Cat"}),
+})
+
+
+def yoni_score(ya: str, yb: str) -> int:
+    if ya == yb:
+        return 4
+    pair = frozenset({ya, yb})
+    if pair in YONI_MORTAL_ENEMIES:
+        return 0
+    if pair in YONI_FRIENDS:
+        return 3
+    return 2  # neutral
+
+
+# Vashya 5×5 compatibility table (max 2 pts).
+VASHYA_TABLE = {
+    ("Manav", "Manav"): 2.0,        ("Manav", "Chatushpada"): 1.0, ("Manav", "Jalachar"): 1.0,  ("Manav", "Vanachar"): 0.0, ("Manav", "Keet"): 1.0,
+    ("Chatushpada", "Manav"): 1.0,  ("Chatushpada", "Chatushpada"): 2.0, ("Chatushpada", "Jalachar"): 1.0, ("Chatushpada", "Vanachar"): 1.0, ("Chatushpada", "Keet"): 0.0,
+    ("Jalachar", "Manav"): 0.5,     ("Jalachar", "Chatushpada"): 1.0,    ("Jalachar", "Jalachar"): 2.0,   ("Jalachar", "Vanachar"): 0.0,  ("Jalachar", "Keet"): 0.5,
+    ("Vanachar", "Manav"): 1.0,     ("Vanachar", "Chatushpada"): 1.0,    ("Vanachar", "Jalachar"): 0.0,   ("Vanachar", "Vanachar"): 2.0,  ("Vanachar", "Keet"): 0.0,
+    ("Keet", "Manav"): 0.0,         ("Keet", "Chatushpada"): 0.0,        ("Keet", "Jalachar"): 0.5,       ("Keet", "Vanachar"): 0.0,      ("Keet", "Keet"): 2.0,
+}
+
+
+# Graha-Maitri planetary friendship (per Brihat Parashara)
+PLANET_FRIENDS = {
+    "Sun":     {"Moon", "Mars", "Jupiter"},
+    "Moon":    {"Sun", "Mercury"},
+    "Mars":    {"Sun", "Moon", "Jupiter"},
+    "Mercury": {"Sun", "Venus"},
+    "Jupiter": {"Sun", "Moon", "Mars"},
+    "Venus":   {"Mercury", "Saturn"},
+    "Saturn":  {"Mercury", "Venus"},
+}
+PLANET_ENEMIES = {
+    "Sun":     {"Venus", "Saturn"},
+    "Moon":    set(),
+    "Mars":    {"Mercury"},
+    "Mercury": {"Moon"},
+    "Jupiter": {"Mercury", "Venus"},
+    "Venus":   {"Sun", "Moon"},
+    "Saturn":  {"Sun", "Moon", "Mars"},
+}
+
+
+def maitri_score(la: str, lb: str) -> int:
+    """Graha-Maitri scoring (max 5)."""
+    if la == lb:
+        return 5
+    a_friend = lb in PLANET_FRIENDS.get(la, set())
+    b_friend = la in PLANET_FRIENDS.get(lb, set())
+    a_enemy = lb in PLANET_ENEMIES.get(la, set())
+    b_enemy = la in PLANET_ENEMIES.get(lb, set())
+    if a_friend and b_friend:
+        return 5
+    if a_friend or b_friend:
+        # one friend, other neutral or enemy
+        return 4 if not (a_enemy or b_enemy) else 1
+    if not (a_enemy or b_enemy):
+        return 3  # mutual neutral
+    if a_enemy and b_enemy:
+        return 0  # mutual enemy
+    return 1  # one neutral, one enemy
 
 # Varna by Rashi (Moon sign)
 RASHI_VARNA = {
@@ -137,6 +229,9 @@ def compute_moon_position(dob: str, birth_time: str, city: str) -> dict:
     # Mars (sidereal) for Mangal dosha
     mars_lon, _ = swe.calc_ut(jd, swe.MARS, flags)
     mars_sign_idx = int((mars_lon[0] % 360) // 30)
+    # Venus (sidereal) — used as Mangal-dosha reference point
+    venus_lon, _ = swe.calc_ut(jd, swe.VENUS, flags)
+    venus_sign_idx = int((venus_lon[0] % 360) // 30)
 
     # Rashi (Moon sign)
     rashi_idx = int(moon_lon_sid // 30)
@@ -152,7 +247,6 @@ def compute_moon_position(dob: str, birth_time: str, city: str) -> dict:
         lagna_lord = RASHI_LORDS[lagna_idx]
     except Exception:
         lagna = "—"; lagna_lord = "—"; lagna_idx = None
-
     # ---- Tithi (lunar day) ----
     diff = (moon_lon[0] - sun_lon[0]) % 360
     tithi_idx = int(diff // 12)  # 0..29
@@ -182,7 +276,9 @@ def compute_moon_position(dob: str, birth_time: str, city: str) -> dict:
         "moon_lon_sid": round(moon_lon_sid, 4),
         "sun_lon_sid": round(sun_lon_sid, 4),
         "mars_sign_idx": mars_sign_idx,
+        "venus_sign_idx": venus_sign_idx,
         "lagna": lagna,
+        "lagna_idx": lagna_idx,
         "lagna_lord": lagna_lord,
         "tithi": tithi_name,
         "paksha": paksha,
@@ -243,8 +339,7 @@ def _karan_name(n: int) -> str:
 
 
 def has_mangal_dosha(mars_sign_idx: int) -> bool:
-    """Mars in houses 1, 2, 4, 7, 8, 12 relative to Moon -> dosha.
-    For a simplified version, we check if Mars is in aggressive signs: Aries(0), Scorpio(7), Capricorn(9)."""
+    """DEPRECATED — kept for backward compat. Use mangal_dosha_full(astro) instead."""
     return mars_sign_idx in {0, 3, 6, 7, 11}
 
 
@@ -262,15 +357,10 @@ def compute_ashtakoota(a: dict, b: dict) -> dict:
     varna_score = 1 if VARNA_RANK[va] >= VARNA_RANK[vb] else 0
     gunas["Varna"] = {"score": varna_score, "max": 1, "a": va, "b": vb}
 
-    # 2. Vashya (2 pts) - same group = 2, compatible = 1, else 0
+    # 2. Vashya (2 pts) - canonical 5×5 table
     wa = RASHI_VASHYA[a["rashi"]]
     wb = RASHI_VASHYA[b["rashi"]]
-    if wa == wb:
-        vashya_score = 2
-    elif {wa, wb} in [{"Manav", "Chatushpada"}, {"Chatushpada", "Jalachar"}, {"Jalachar", "Keet"}]:
-        vashya_score = 1
-    else:
-        vashya_score = 0
+    vashya_score = VASHYA_TABLE.get((wa, wb), 0.0)
     gunas["Vashya"] = {"score": vashya_score, "max": 2, "a": wa, "b": wb}
 
     # 3. Tara (3 pts) - based on count from A's nakshatra to B's
@@ -286,44 +376,15 @@ def compute_ashtakoota(a: dict, b: dict) -> dict:
     gunas["Tara"] = {"score": round(tara_score, 1), "max": 3,
                      "a": tara_name(count_ab), "b": tara_name(count_ba)}
 
-    # 4. Yoni (4 pts) - same yoni=4, friendly=3, neutral=2, enemy=1, mortal=0
+    # 4. Yoni (4 pts) - canonical table with 7 mortal-enemy pairs
     ya = NAKSHATRA_YONI[a["nakshatra"]]
     yb = NAKSHATRA_YONI[b["nakshatra"]]
-    if ya == yb:
-        yoni_score = 4
-    else:
-        # Simplified: different yonis get varied scores deterministically
-        enemies = {("Horse", "Buffalo"), ("Cow", "Tiger"), ("Serpent", "Mongoose"),
-                   ("Cat", "Rat"), ("Dog", "Deer"), ("Monkey", "Sheep"),
-                   ("Lion", "Elephant")}
-        pair = tuple(sorted([ya, yb]))
-        if pair in {tuple(sorted(e)) for e in enemies}:
-            yoni_score = 0
-        else:
-            yoni_score = 2
-    gunas["Yoni"] = {"score": yoni_score, "max": 4, "a": ya, "b": yb}
+    gunas["Yoni"] = {"score": yoni_score(ya, yb), "max": 4, "a": ya, "b": yb}
 
-    # 5. Graha Maitri (5 pts) - friendship of Moon-sign lords
+    # 5. Graha Maitri (5 pts) - Brihat Parashara friendship table
     la = RASHI_LORDS[a["rashi_idx"]]
     lb = RASHI_LORDS[b["rashi_idx"]]
-    friends = {
-        "Sun": {"Moon", "Mars", "Jupiter"},
-        "Moon": {"Sun", "Mercury"},
-        "Mars": {"Sun", "Moon", "Jupiter"},
-        "Mercury": {"Sun", "Venus"},
-        "Jupiter": {"Sun", "Moon", "Mars"},
-        "Venus": {"Mercury", "Saturn"},
-        "Saturn": {"Mercury", "Venus"}
-    }
-    if la == lb:
-        gm_score = 5
-    elif lb in friends.get(la, set()) and la in friends.get(lb, set()):
-        gm_score = 4
-    elif lb in friends.get(la, set()) or la in friends.get(lb, set()):
-        gm_score = 3
-    else:
-        gm_score = 1
-    gunas["Graha Maitri"] = {"score": gm_score, "max": 5, "a": la, "b": lb}
+    gunas["Graha Maitri"] = {"score": maitri_score(la, lb), "max": 5, "a": la, "b": lb}
 
     # 6. Gana (6 pts) - Deva-Deva=6, Deva-Manushya=5, Manushya-Manushya=6, Rakshasa-Rakshasa=6, Deva-Rakshasa=0, Manushya-Rakshasa=1
     ga = NAKSHATRA_GANA[a["nakshatra"]]
@@ -339,30 +400,27 @@ def compute_ashtakoota(a: dict, b: dict) -> dict:
     gunas["Gana"] = {"score": gana_score, "max": 6, "a": ga, "b": gb}
 
     # 7. Bhakoot (7 pts) - based on Rashi difference
+    # 7. Bhakoot (7 pts) - rashi distance (folded to 0..6)
+    # 0(same):7, 1(Dwirdwadash 12/2):0, 2:7, 3(Trikona):7,
+    # 4(Navam-Pancham 9/5):0, 5(Shadashtak 6/8):0, 6(1/7):7
     diff = abs(a["rashi_idx"] - b["rashi_idx"])
     diff = min(diff, 12 - diff)
-    if diff in {1, 5}:
-        bhakoot_score = 0
-    elif diff in {2, 6}:
-        bhakoot_score = 7
-    elif diff in {3}:
-        bhakoot_score = 4
-    elif diff in {4}:
-        bhakoot_score = 4
-    else:
-        bhakoot_score = 7
-    gunas["Bhakoot"] = {"score": bhakoot_score, "max": 7}
+    bhakoot_score = 0 if diff in {1, 4, 5} else 7
+    gunas["Bhakoot"] = {"score": bhakoot_score, "max": 7, "a": a["rashi"], "b": b["rashi"]}
 
-    # 8. Nadi (8 pts) - same nadi = 0, different = 8
-    nadi_a = NADI_CYCLE[a["nakshatra_idx"] % 3]
-    nadi_b = NADI_CYCLE[b["nakshatra_idx"] % 3]
+    # 8. Nadi (8 pts) - canonical 9-position pattern; same nadi → 0
+    nadi_a = nadi_for(a["nakshatra_idx"])
+    nadi_b = nadi_for(b["nakshatra_idx"])
     nadi_score = 0 if nadi_a == nadi_b else 8
+    # Nadi-dosha exception: same Rashi or same Nakshatra cancels the dosha
+    if nadi_score == 0 and (a["rashi_idx"] == b["rashi_idx"] or a["nakshatra_idx"] == b["nakshatra_idx"]):
+        nadi_score = 8
     gunas["Nadi"] = {"score": nadi_score, "max": 8, "a": nadi_a, "b": nadi_b}
 
     total = sum(g["score"] for g in gunas.values())
 
-    mangal_a = has_mangal_dosha(a["mars_sign_idx"])
-    mangal_b = has_mangal_dosha(b["mars_sign_idx"])
+    mangal_a = mangal_dosha_full(a)
+    mangal_b = mangal_dosha_full(b)
 
     return {
         "gunas": gunas,
@@ -371,6 +429,33 @@ def compute_ashtakoota(a: dict, b: dict) -> dict:
         "mangal_a": mangal_a,
         "mangal_b": mangal_b,
     }
+
+
+def mangal_dosha_full(astro: dict) -> bool:
+    """Mars in 1st, 2nd, 4th, 7th, 8th, 12th house from Lagna, Moon, OR Venus → Mangal Dosha.
+    Cancellations (simplified):
+      - Mars in own/exalted sign (Aries, Scorpio, Capricorn) → reduced.
+      - Born during day for some houses, etc. — not implemented.
+    """
+    mars_sign = astro.get("mars_sign_idx")
+    if mars_sign is None:
+        return False
+
+    DOSHA_HOUSES = {1, 2, 4, 7, 8, 12}
+    refs = []
+    if astro.get("lagna_idx") is not None:
+        refs.append(astro["lagna_idx"])
+    if astro.get("rashi_idx") is not None:
+        refs.append(astro["rashi_idx"])
+    venus_sign_idx = astro.get("venus_sign_idx")
+    if venus_sign_idx is not None:
+        refs.append(venus_sign_idx)
+
+    for ref in refs:
+        house = ((mars_sign - ref) % 12) + 1
+        if house in DOSHA_HOUSES:
+            return True
+    return False
 
 
 def compatibility_verdict(total: float, mangal_a: bool, mangal_b: bool) -> str:

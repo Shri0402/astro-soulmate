@@ -7,7 +7,7 @@ import os
 import io
 import logging
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from contextlib import asynccontextmanager
 
@@ -80,6 +80,8 @@ async def lifespan(_app: FastAPI):
         [("requester_user_id", 1), ("receiver_user_id", 1)], unique=True
     )
     await db.profile_change_requests.create_index([("user_id", 1), ("status", 1)])
+    await db.password_reset_tokens.create_index("token", unique=True)
+    await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
     await seed_admin()
     await seed_demo_profiles(db)
     await regenerate_all_matches(db)
@@ -119,6 +121,15 @@ class ProfileIn(BaseModel):
 
 class CheckoutIn(BaseModel):
     origin_url: str
+
+
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str
+    new_password: str = Field(min_length=6)
 
 
 class ProfileEditIn(BaseModel):
@@ -264,6 +275,77 @@ async def login(body: LoginIn, response: Response):
 async def logout(response: Response):
     clear_auth_cookies(response)
     return {"ok": True}
+
+
+@api.post("/auth/forgot-password")
+async def forgot_password(body: ForgotPasswordIn):
+    """Generate a single-use reset token. Always returns 200 (don't leak account existence).
+    If RESEND_API_KEY is configured, emails the link. Otherwise returns the link in dev_link."""
+    email = body.email.lower()
+    user = await db.users.find_one({"email": email})
+    response = {"ok": True, "message": "If that email matches a member, a reset link has been sent."}
+    if not user:
+        return response
+
+    token = secrets.token_urlsafe(32)
+    expires = datetime.now(timezone.utc) + timedelta(minutes=30)
+    await db.password_reset_tokens.insert_one({
+        "token": token,
+        "user_id": str(user["_id"]),
+        "email": email,
+        "used": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "expires_at": expires,
+    })
+    base = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    link = f"{base}/reset-password/{token}"
+    html = f"""
+<!doctype html><html><body style="margin:0;background:#0A0305;font-family:Helvetica,Arial,sans-serif;color:#F3E6C6;">
+<table width="100%" style="background:#0A0305;padding:40px 0;"><tr><td align="center">
+<table width="540" cellpadding="0" cellspacing="0" style="background:#1A0810;border:1px solid rgba(212,175,55,0.25);">
+<tr><td style="padding:40px;">
+  <p style="color:#D4AF37;letter-spacing:0.3em;font-size:11px;text-transform:uppercase;margin:0 0 12px 0;">Stars Connection</p>
+  <h2 style="font-family:Georgia,serif;font-size:28px;color:#F3E6C6;margin:0 0 16px 0;font-weight:400;">Reset your password</h2>
+  <p style="color:#C2A3A8;font-size:14px;line-height:1.7;margin:0 0 24px 0;">Click below to choose a new password. This link expires in 30 minutes and can be used only once. If you did not request this, ignore the email.</p>
+  <a href="{link}" style="display:inline-block;background:#D4AF37;color:#0A0305;padding:12px 32px;text-decoration:none;letter-spacing:0.2em;font-size:12px;text-transform:uppercase;font-weight:600;">Reset password</a>
+  <p style="color:#8A6B72;font-size:12px;margin-top:24px;word-break:break-all;">Or paste this URL: {link}</p>
+</td></tr></table></td></tr></table></body></html>"""
+    result = await send_email(to=email, subject="Reset your Stars Connection password", html=html)
+
+    if not result.get("ok"):
+        # Surface the link in dev/stub mode so flow remains testable without a configured email key
+        response["dev_link"] = link
+        response["email_sent"] = False
+    else:
+        response["email_sent"] = True
+    return response
+
+
+@api.post("/auth/reset-password")
+async def reset_password(body: ResetPasswordIn, response: Response):
+    rec = await db.password_reset_tokens.find_one({"token": body.token})
+    if not rec or rec.get("used"):
+        raise HTTPException(400, "Invalid or expired reset token")
+    expires_at = rec.get("expires_at")
+    if expires_at and datetime.now(timezone.utc) > expires_at.replace(tzinfo=timezone.utc):
+        raise HTTPException(400, "Reset token expired")
+    user = await db.users.find_one({"_id": ObjectId(rec["user_id"])})
+    if not user:
+        raise HTTPException(404, "Member not found")
+    await db.users.update_one(
+        {"_id": user["_id"]},
+        {"$set": {"password_hash": hash_password(body.new_password),
+                  "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    await db.password_reset_tokens.update_one(
+        {"_id": rec["_id"]},
+        {"$set": {"used": True, "used_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    # Auto-login post reset
+    uid = str(user["_id"])
+    set_auth_cookies(response, create_access_token(uid, user["email"]), create_refresh_token(uid))
+    user["id"] = uid
+    return _public_user(user)
 
 
 @api.get("/auth/me")
