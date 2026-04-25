@@ -50,7 +50,7 @@ function Shell() {
         <Route path="/inbox" element={<Protected><Inbox /></Protected>} />
         <Route path="/invitations" element={<Protected><Invitations /></Protected>} />
         <Route path="/profile" element={<Protected><Profile /></Protected>} />
-        <Route path="/admin" element={<Protected><Admin /></Protected>} />
+        <Route path="/admin" element={<Protected needsProfile={false}><Admin /></Protected>} />
         <Route path="/payment/success" element={<Protected><PaymentSuccess /></Protected>} />
         <Route path="/payment/cancel" element={<Protected><PaymentCancel /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />

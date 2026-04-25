@@ -54,7 +54,7 @@ async def seed_admin():
             "password_hash": hash_password(admin_pwd),
             "name": "Admin", "full_name": "Admin",
             "role": "admin", "is_premium": True, "unlocked_premium": 999,
-            "is_private_member": True, "profile_complete": False,
+            "is_private_member": True, "profile_complete": True,
             "can_login": True, "email_verified": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
