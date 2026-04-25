@@ -12,6 +12,8 @@ import Dashboard from "./pages/Dashboard";
 import Kundali from "./pages/Kundali";
 import Inbox from "./pages/Inbox";
 import Invitations from "./pages/Invitations";
+import Profile from "./pages/Profile";
+import Admin from "./pages/Admin";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 
@@ -47,6 +49,8 @@ function Shell() {
         <Route path="/kundali/:matchId" element={<Protected><Kundali /></Protected>} />
         <Route path="/inbox" element={<Protected><Inbox /></Protected>} />
         <Route path="/invitations" element={<Protected><Invitations /></Protected>} />
+        <Route path="/profile" element={<Protected><Profile /></Protected>} />
+        <Route path="/admin" element={<Protected><Admin /></Protected>} />
         <Route path="/payment/success" element={<Protected><PaymentSuccess /></Protected>} />
         <Route path="/payment/cancel" element={<Protected><PaymentCancel /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />

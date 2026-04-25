@@ -181,7 +181,7 @@ class TestKundali:
         assert r.status_code == 200, r.text
         data = r.json()
         rep = data["report"]
-        assert len(rep["birth_details"]) == 8
+        assert len(rep["birth_details"]) >= 8  # v3 expanded to 15 rows
         assert len(rep["ashtakoota_table"]) == 8
         for row in rep["ashtakoota_table"]:
             assert {"guna", "boy", "girl", "max_points", "points_obtained", "area_of_life"} <= set(row.keys())

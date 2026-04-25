@@ -2,7 +2,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import api from "../api";
-import { Star, SignOut, Bell, Envelope, Users } from "@phosphor-icons/react";
+import { Star, SignOut, Bell, Envelope, Users, User, Crown } from "@phosphor-icons/react";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -42,6 +42,8 @@ export default function Navbar() {
               {user.profile_complete && link("/dashboard", "Dashboard", "nav-dashboard")}
               {user.profile_complete && link("/inbox", "", "nav-inbox", Bell, pending)}
               {user.profile_complete && link("/invitations", "", "nav-invites", Users)}
+              {user.profile_complete && link("/profile", "", "nav-profile", User)}
+              {user.role === "admin" && link("/admin", "Admin", "nav-admin", Crown)}
               <span className="hidden sm:inline text-[#8A6B72]">{user.name}</span>
               <button onClick={handleLogout} data-testid="nav-logout"
                 className="flex items-center gap-1.5 px-3 py-1.5 border border-[#D4AF37]/30 hover:border-[#D4AF37] hover:text-[#D4AF37] transition">

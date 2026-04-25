@@ -38,9 +38,12 @@ def dob_password(dob_iso: str) -> str:
 async def seed_demo_profiles(db) -> None:
     for p in PRIVATE_USERS:
         existing = await db.users.find_one({"email": p["email"].lower()})
-        if existing:
-            continue
         astro = compute_moon_position(p["dob"], p["birth_time"], p["city"])
+        if existing:
+            # Refresh astro if missing or if it lacks new fields (lagna/tithi/yoga/karan)
+            if not existing.get("astro") or "lagna" not in (existing.get("astro") or {}):
+                await db.users.update_one({"_id": existing["_id"]}, {"$set": {"astro": astro}})
+            continue
         pwd = dob_password(p["dob"])
         doc = {
             "email": p["email"].lower(),

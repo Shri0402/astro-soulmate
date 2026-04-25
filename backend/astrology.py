@@ -108,7 +108,7 @@ def compute_moon_position(dob: str, birth_time: str, city: str) -> dict:
     dob: 'YYYY-MM-DD'
     birth_time: 'HH:MM' (24h, local)
     city: str
-    Returns: {rashi, rashi_idx, nakshatra, nakshatra_idx, pada, moon_lon_sid, lat, lon}
+    Returns full natal data including Rashi, Nakshatra, Lagna, Tithi, Yoga, Karan.
     """
     lat, lon = resolve_location(city)
 
@@ -126,33 +126,120 @@ def compute_moon_position(dob: str, birth_time: str, city: str) -> dict:
     jd = swe.julday(utc_dt.year, utc_dt.month, utc_dt.day,
                     utc_dt.hour + utc_dt.minute / 60 + utc_dt.second / 3600)
 
-    # Sidereal moon longitude
     flags = swe.FLG_SWIEPH | swe.FLG_SIDEREAL
+
+    # Sidereal moon longitude
     moon_lon, _ = swe.calc_ut(jd, swe.MOON, flags)
     moon_lon_sid = moon_lon[0] % 360
-
-    # Rashi: 30° each
-    rashi_idx = int(moon_lon_sid // 30)
-    # Nakshatra: 13°20' each = 13.3333°
-    nak_idx = int(moon_lon_sid // (360 / 27))
-    # Pada: 1-4 within a nakshatra
-    pada = int(((moon_lon_sid % (360 / 27)) // (360 / 108))) + 1
-
-    # Mars longitude for Mangal dosha detection
+    # Sun (sidereal)
+    sun_lon, _ = swe.calc_ut(jd, swe.SUN, flags)
+    sun_lon_sid = sun_lon[0] % 360
+    # Mars (sidereal) for Mangal dosha
     mars_lon, _ = swe.calc_ut(jd, swe.MARS, flags)
     mars_sign_idx = int((mars_lon[0] % 360) // 30)
+
+    # Rashi (Moon sign)
+    rashi_idx = int(moon_lon_sid // 30)
+    nak_idx = int(moon_lon_sid // (360 / 27))
+    pada = int(((moon_lon_sid % (360 / 27)) // (360 / 108))) + 1
+
+    # ---- Lagna (Ascendant) ----
+    try:
+        cusps, ascmc = swe.houses_ex(jd, lat, lon, b'P', swe.FLG_SIDEREAL)
+        lagna_lon = ascmc[0] % 360
+        lagna_idx = int(lagna_lon // 30)
+        lagna = RASHIS[lagna_idx]
+        lagna_lord = RASHI_LORDS[lagna_idx]
+    except Exception:
+        lagna = "—"; lagna_lord = "—"; lagna_idx = None
+
+    # ---- Tithi (lunar day) ----
+    diff = (moon_lon[0] - sun_lon[0]) % 360
+    tithi_idx = int(diff // 12)  # 0..29
+    tithi_name = _tithi_name(tithi_idx)
+    paksha = "Shukla" if tithi_idx < 15 else "Krishna"
+
+    # ---- Yoga ----
+    yoga_idx = int(((moon_lon[0] + sun_lon[0]) % 360) // (360 / 27))
+    yoga = YOGAS[yoga_idx]
+
+    # ---- Karan (half tithi) ----
+    karan_num = int(diff // 6) % 60  # 60 karans in a synodic cycle
+    karan = _karan_name(karan_num)
+
+    # ---- Hindu weekday ----
+    weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+    weekday = weekdays[utc_dt.weekday() if False else (utc_dt.isoweekday() % 7)]
 
     return {
         "rashi": RASHIS[rashi_idx],
         "rashi_idx": rashi_idx,
+        "rashi_lord": RASHI_LORDS[rashi_idx],
         "nakshatra": NAKSHATRAS[nak_idx],
         "nakshatra_idx": nak_idx,
+        "nakshatra_lord": NAK_LORDS[nak_idx],
         "pada": pada,
         "moon_lon_sid": round(moon_lon_sid, 4),
+        "sun_lon_sid": round(sun_lon_sid, 4),
         "mars_sign_idx": mars_sign_idx,
+        "lagna": lagna,
+        "lagna_lord": lagna_lord,
+        "tithi": tithi_name,
+        "paksha": paksha,
+        "yoga": yoga,
+        "karan": karan,
+        "weekday": weekday,
         "lat": lat,
         "lon": lon,
+        "tz": tz_name,
     }
+
+
+# Nakshatra lords (cycle of 9: Ketu, Venus, Sun, Moon, Mars, Rahu, Jupiter, Saturn, Mercury)
+NAK_LORDS = ["Ketu", "Venus", "Sun", "Moon", "Mars", "Rahu", "Jupiter", "Saturn", "Mercury"] * 3
+
+YOGAS = [
+    "Vishkambha", "Priti", "Ayushman", "Saubhagya", "Shobhana", "Atiganda",
+    "Sukarma", "Dhriti", "Shoola", "Ganda", "Vridhi", "Dhruva",
+    "Vyaghata", "Harshana", "Vajra", "Siddhi", "Vyatipata", "Variyana",
+    "Parigha", "Shiva", "Siddha", "Sadhya", "Shubha", "Shukla",
+    "Brahma", "Indra", "Vaidhriti"
+]
+
+TITHI_NAMES_HALF = [
+    "Pratipada", "Dwitiya", "Tritiya", "Chaturthi", "Panchami", "Shashthi",
+    "Saptami", "Ashtami", "Navami", "Dashami", "Ekadashi", "Dwadashi",
+    "Trayodashi", "Chaturdashi"
+]
+
+
+def _tithi_name(idx: int) -> str:
+    # 0..14 = Shukla 1..15 (15th = Purnima); 15..29 = Krishna 1..15 (30th = Amavasya)
+    if idx == 14:
+        return "Purnima"
+    if idx == 29:
+        return "Amavasya"
+    half_idx = idx if idx < 14 else idx - 15
+    return TITHI_NAMES_HALF[half_idx]
+
+
+# 11 Karans (4 fixed + 7 movable cycle through 60 half-tithis)
+KARANS_MOVABLE = ["Bava", "Balava", "Kaulava", "Taitila", "Garaja", "Vanija", "Vishti"]
+KARANS_FIXED = ["Shakuni", "Chatushpada", "Naga", "Kimstughna"]
+
+
+def _karan_name(n: int) -> str:
+    # Position 0: Kimstughna, 1..56: 7 movables × 8, 57: Shakuni, 58: Chatushpada, 59: Naga
+    if n == 0:
+        return "Kimstughna"
+    if n == 57:
+        return "Shakuni"
+    if n == 58:
+        return "Chatushpada"
+    if n == 59:
+        return "Naga"
+    # 1..56 cycles 7 movable karans
+    return KARANS_MOVABLE[(n - 1) % 7]
 
 
 def has_mangal_dosha(mars_sign_idx: int) -> bool:

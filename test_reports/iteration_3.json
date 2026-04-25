@@ -1,0 +1,48 @@
+{
+  "summary": "Phase-3 backend regression (39/39 pytest pass: 20 v2 + 19 v3) covering: new astro fields (lagna/lagna_lord/tithi/paksha/yoga/karan/nakshatra_lord) on /auth/me, kundali birth_details=15 rows with all expected labels, expanded interpretation library probed for 5 new combos (Brahmin/Kshatriya, Manav/Chatushpada, Horse/Buffalo, Sun/Moon Graha-Maitri, Dev/Manav Gana), PATCH /profile free-fields persistence + sensitive-field silent-ignore + empty-body 400, /profile/change-request create+409 duplicate+400 non-sensitive+listing-mine, /admin/* RBAC (403 for non-admin) + members list (no password_hash, _id stringified) + pending list + approve flips matches & recomputes astro on birth_time + reject blocks subsequent approve, /invites/send-email soft-fails with stub=true + share_link present + 403 non-creator + 404 unknown-code + 400 already-used. Frontend: /profile page works end-to-end for member (free-edit save+persist, change-request submit + appears in Your change requests, Lock icons render on sensitive fields), nav-profile and nav-admin (admin-only) icons present, non-admin /admin shows 'Admin only.' guard. CRITICAL FRONTEND BUG: admin user (profile_complete=false in seed_admin) is bounced to /onboarding when navigating to /admin (and /invitations) because the route Protected wrapper defaults needsProfile=true — admin UI is unreachable from the browser despite backend admin endpoints working perfectly. Email-it flow on Invitations is gated behind the same redirect for admin.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/profile/change-requests/mine + POST /api/profile/change-request", "issue": "old_value computation uses `user.get(field) or user.get('astro',{}).get(field)` — for `looking_for`/`gender`/`dob`/`birth_time` this is fine because they live on the user doc, but the fallback to astro is dead code (none of the SENSITIVE_FIELDS exist under astro). Harmless but misleading."},
+      {"endpoint": "POST /api/admin/change-requests/{id}/reject", "issue": "admin_note is read from query string (`request: Request, admin_note: str = ''`) rather than from request body — works but unconventional REST shape. Frontend currently does not pass admin_note at all."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Admin -> /admin and Admin -> /invitations", "issue": "Admin user (seeded with profile_complete=false) is force-redirected to /onboarding by <Protected needsProfile={true}> in /app/frontend/src/App.js (lines 51-53). Result: admin can NEVER reach /admin or /invitations in the browser even though Navbar shows the Crown 'Admin' link. Backend admin RBAC works correctly. Fix options: (a) seed admin with profile_complete=true in /app/backend/server.py seed_admin(), OR (b) wrap /admin route with <Protected needsProfile={false}>, OR (c) bypass needsProfile when user.role==='admin'.", "affected_selectors": ["[data-testid='nav-admin']", "[data-testid='admin-page']", "[data-testid='generate-invite']", "[data-testid^='email-']"]}
+    ],
+    "design_issues": [
+      {"screen": "All pages", "issues": ["Browser <title> still 'Emergent | Fullstack App' — carryover from iteration_2."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stars_v3.py",
+    "/app/backend/tests/test_stars_v2.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/v3_results.xml"
+  ],
+  "action_items": [
+    "[CRITICAL] Make admin route reachable: simplest fix is to mark the admin user as profile_complete=true in seed_admin() (server.py line 57 already inserts profile_complete=False; switch to True). Alternative: change <Route path='/admin' element={<Protected><Admin /></Protected>} /> to needsProfile={false}.",
+    "[OPTIONAL] Update /app/frontend/public/index.html <title> to 'Stars Connection' (carryover).",
+    "[OPTIONAL] Move admin_note from query-param to JSON body in POST /admin/change-requests/{id}/reject for REST consistency."
+  ],
+  "critical_code_review_comments": [
+    "server.py grew to ~895 lines (was 667 in v2) — Phase-3 added profile-edit + change-requests + admin + invites/send-email. Approaching the 700-line guideline; suggest extracting an /app/backend/routers/admin.py and /app/backend/routers/profile_edit.py.",
+    "PATCH /profile correctly silently ignores non-EDITABLE_FIELDS via Pydantic model + intersection with EDITABLE_FIELDS — verified at runtime (looking_for/dob payload did not mutate DB).",
+    "Admin endpoint protection is via `_require_admin` helper which calls get_current_user then checks role. Verified 403 for non-admin members across both /admin/change-requests and /admin/members.",
+    "send_email() correctly soft-fails with {ok:False, stub:True, message, share_link} when RESEND_API_KEY is empty — verified across 4 invite-email scenarios.",
+    "_public_user serializer continues to never expose password_hash and _id is stringified throughout — verified on /admin/members (no password_hash leaked, _id is str)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_stars_v3.py (created — 19 pytest cases for Phase-3 features)",
+    "/app/backend/tests/test_stars_v2.py (one assertion relaxed: birth_details length 8 -> >=8 since v3 expanded to 15 rows)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "75%"},
+  "test_credentials": "All from /app/memory/test_credentials.md verified working. Member: 123@gmail.com / 02081998. Admin: admin@starsconnection.com / Admin@Stars2026.",
+  "seed_data_creation": "Tests created several fresh invites and one TEST register account (v3used+<ts>@example.com) via admin's invite. No cleanup endpoint — these accumulate but do not affect matching (no profile filled).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/ -v to validate full backend regression (39 cases). Frontend admin UI is unreachable in current build — once main agent flips admin's seed profile_complete to true OR loosens <Protected> on /admin, retest by logging in as admin and navigating to /admin to verify Pending requests + Members tabs render and Approve/Reject decide flows hit backend. Email-it flow on /invitations is also blocked by the same redirect for admin. Member flow at /profile is fully working end-to-end.",
+  "rca of the issue": "Frontend admin-UI unreachable — RCA: in /app/frontend/src/App.js the /admin route is wrapped with <Protected> whose default prop needsProfile=true. seed_admin() in /app/backend/server.py inserts the admin user with profile_complete=False. Therefore when admin navigates to /admin, Protected sees user.profile_complete===false and Navigates to /onboarding. Reproduction: login as admin@starsconnection.com / Admin@Stars2026 → Navbar shows Crown 'Admin' → click Admin → URL flips to /onboarding. Mitigation: easiest fix is `profile_complete: True` in seed_admin() insert_one (server.py line ~57); also makes Navbar 'Profile' link appear for admin if desired. Alternative: <Route path='/admin' element={<Protected needsProfile={false}><Admin /></Protected>} />."
+}

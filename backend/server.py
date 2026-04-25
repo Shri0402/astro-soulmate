@@ -31,6 +31,7 @@ from report_interpretations import interpret, GUNA_AREA, conclusion, mangal_stat
 from emergentintegrations.payments.stripe.checkout import (
     StripeCheckout, CheckoutSessionRequest
 )
+from email_service import send_email, invite_email_html, phone_request_email_html
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -73,6 +74,7 @@ async def lifespan(_app: FastAPI):
     await db.phone_number_requests.create_index(
         [("requester_user_id", 1), ("receiver_user_id", 1)], unique=True
     )
+    await db.profile_change_requests.create_index([("user_id", 1), ("status", 1)])
     await seed_admin()
     await seed_demo_profiles(db)
     await regenerate_all_matches(db)
@@ -112,6 +114,29 @@ class ProfileIn(BaseModel):
 
 class CheckoutIn(BaseModel):
     origin_url: str
+
+
+class ProfileEditIn(BaseModel):
+    """Free-edit fields only. Sensitive fields (looking_for, dob, birth_time, gender) require admin approval."""
+    bio: Optional[str] = None
+    phone: Optional[str] = None
+    birth_city: Optional[str] = None
+    state: Optional[str] = None
+    name: Optional[str] = None
+
+
+class ChangeRequestIn(BaseModel):
+    """Request a change to a sensitive field (admin must approve)."""
+    field: str       # one of: looking_for, dob, birth_time, gender
+    new_value: str
+    reason: Optional[str] = ""
+
+
+class InviteEmailIn(BaseModel):
+    code: str
+    invitee_email: EmailStr
+    invitee_name: Optional[str] = ""
+    note: Optional[str] = ""
 
 
 class PhoneRequestIn(BaseModel):
@@ -343,11 +368,19 @@ async def get_kundali(match_id: str, request: Request):
             {"label": "Time of Birth",  "a": me_user.get("birth_time", "—"),       "b": other.get("birth_time", "—")},
             {"label": "Place of Birth", "a": me_user.get("birth_city", "—"),       "b": match.get("match_city", "—")},
             {"label": "State",          "a": me_user.get("state", "—"),            "b": other.get("state", "—")},
+            {"label": "Tithi",          "a": me_user.get("astro", {}).get("tithi", "—"),    "b": other.get("astro", {}).get("tithi", "—")},
+            {"label": "Paksha",         "a": me_user.get("astro", {}).get("paksha", "—"),   "b": other.get("astro", {}).get("paksha", "—")},
+            {"label": "Yoga",           "a": me_user.get("astro", {}).get("yoga", "—"),     "b": other.get("astro", {}).get("yoga", "—")},
+            {"label": "Karan",          "a": me_user.get("astro", {}).get("karan", "—"),    "b": other.get("astro", {}).get("karan", "—")},
+            {"label": "Lagna",          "a": me_user.get("astro", {}).get("lagna", "—"),    "b": other.get("astro", {}).get("lagna", "—")},
+            {"label": "Lagna Lord",     "a": me_user.get("astro", {}).get("lagna_lord", "—"), "b": other.get("astro", {}).get("lagna_lord", "—")},
             {"label": "Rashi",          "a": me_user.get("astro", {}).get("rashi", "—"),     "b": other.get("astro", {}).get("rashi", "—")},
             {"label": "Rashi Lord",     "a": _rashi_lord(me_user.get("astro", {}).get("rashi_idx")),
                                          "b": _rashi_lord(other.get("astro", {}).get("rashi_idx"))},
             {"label": "Nakshatra-Pada", "a": f"{me_user.get('astro', {}).get('nakshatra', '—')} - {me_user.get('astro', {}).get('pada', '—')}",
                                          "b": f"{other.get('astro', {}).get('nakshatra', '—')} - {other.get('astro', {}).get('pada', '—')}"},
+            {"label": "Nakshatra Lord", "a": me_user.get("astro", {}).get("nakshatra_lord", "—"),
+                                         "b": other.get("astro", {}).get("nakshatra_lord", "—")},
         ],
         "ashtakoota_table": [],
         "interpretations": [],
@@ -655,6 +688,201 @@ async def my_analytics(request: Request):
 @api.get("/")
 async def root():
     return {"service": "Stars Connection", "version": "2.0", "private": True}
+
+
+# ---------- Profile editing (free fields) ----------
+EDITABLE_FIELDS = {"bio", "phone", "birth_city", "state", "name"}
+
+
+@api.patch("/profile")
+async def edit_profile(body: ProfileEditIn, request: Request):
+    """Free-edit fields: bio, phone, birth_city, state, name. No re-computation of astro."""
+    user = await _current(request)
+    update = {k: v for k, v in body.model_dump(exclude_none=True).items() if k in EDITABLE_FIELDS}
+    if not update:
+        raise HTTPException(400, "Nothing to update")
+    if "name" in update:
+        update["full_name"] = update["name"]
+    if "birth_city" in update:
+        update["city"] = update["birth_city"]
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one({"_id": ObjectId(user["id"])}, {"$set": update})
+    fresh = await db.users.find_one({"_id": ObjectId(user["id"])})
+    fresh["id"] = user["id"]
+    return _public_user(fresh)
+
+
+# ---------- Profile change requests (admin-approval gate) ----------
+SENSITIVE_FIELDS = {"looking_for", "dob", "birth_time", "gender"}
+
+
+@api.post("/profile/change-request")
+async def create_change_request(body: ChangeRequestIn, request: Request):
+    user = await _current(request)
+    if body.field not in SENSITIVE_FIELDS:
+        raise HTTPException(400, f"Field '{body.field}' does not require approval — edit directly via PATCH /profile.")
+    # Disallow duplicate pending request for same field
+    existing = await db.profile_change_requests.find_one({
+        "user_id": user["id"], "field": body.field, "status": "pending"
+    })
+    if existing:
+        raise HTTPException(409, "A pending request already exists for this field.")
+    doc = {
+        "user_id": user["id"],
+        "user_name": user.get("name") or user.get("full_name"),
+        "user_email": user.get("email"),
+        "field": body.field,
+        "old_value": user.get(body.field) or user.get("astro", {}).get(body.field) if user.get("astro") else None,
+        "new_value": body.new_value,
+        "reason": body.reason or "",
+        "status": "pending",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    res = await db.profile_change_requests.insert_one(doc)
+    return {"id": str(res.inserted_id), "status": "pending"}
+
+
+@api.get("/profile/change-requests/mine")
+async def my_change_requests(request: Request):
+    user = await _current(request)
+    items = await db.profile_change_requests.find(
+        {"user_id": user["id"]}
+    ).sort("created_at", -1).to_list(100)
+    return {"items": [
+        {"id": str(i["_id"]), "field": i["field"], "old_value": i.get("old_value"),
+         "new_value": i["new_value"], "reason": i.get("reason", ""),
+         "status": i["status"], "created_at": i.get("created_at"),
+         "decided_at": i.get("decided_at"), "admin_note": i.get("admin_note", "")}
+        for i in items
+    ]}
+
+
+# ---------- Admin endpoints ----------
+async def _require_admin(request: Request) -> dict:
+    user = await _current(request)
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+    return user
+
+
+@api.get("/admin/change-requests")
+async def admin_list_change_requests(request: Request, status: str = "pending"):
+    await _require_admin(request)
+    items = await db.profile_change_requests.find({"status": status}).sort("created_at", -1).to_list(500)
+    return {"items": [
+        {"id": str(i["_id"]), "user_id": i["user_id"], "user_name": i.get("user_name"),
+         "user_email": i.get("user_email"), "field": i["field"],
+         "old_value": i.get("old_value"), "new_value": i["new_value"],
+         "reason": i.get("reason", ""), "status": i["status"],
+         "created_at": i.get("created_at")}
+        for i in items
+    ]}
+
+
+@api.post("/admin/change-requests/{req_id}/approve")
+async def admin_approve(req_id: str, request: Request):
+    await _require_admin(request)
+    req = await db.profile_change_requests.find_one({"_id": ObjectId(req_id)})
+    if not req or req["status"] != "pending":
+        raise HTTPException(404, "Request not found or already decided")
+
+    user = await db.users.find_one({"_id": ObjectId(req["user_id"])})
+    if not user:
+        raise HTTPException(404, "Member not found")
+
+    field = req["field"]; new_value = req["new_value"]
+
+    # If birth-time/dob change, recompute astro and regenerate matches
+    update = {field: new_value}
+    if field in {"dob", "birth_time"}:
+        new_dob = new_value if field == "dob" else user.get("dob")
+        new_bt = new_value if field == "birth_time" else user.get("birth_time")
+        try:
+            astro = compute_moon_position(new_dob, new_bt, user.get("birth_city", "Delhi"))
+            update["astro"] = astro
+        except Exception as e:
+            raise HTTPException(400, f"Cannot recompute chart: {e}")
+
+    update["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.users.update_one({"_id": ObjectId(req["user_id"])}, {"$set": update})
+
+    # If looking_for / dob / birth_time / gender changed → regenerate matches
+    if field in {"looking_for", "dob", "birth_time", "gender"}:
+        await generate_matches_for_user(db, req["user_id"])
+
+    await db.profile_change_requests.update_one(
+        {"_id": ObjectId(req_id)},
+        {"$set": {"status": "approved", "decided_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"ok": True}
+
+
+@api.post("/admin/change-requests/{req_id}/reject")
+async def admin_reject(req_id: str, request: Request, admin_note: str = ""):
+    await _require_admin(request)
+    req = await db.profile_change_requests.find_one({"_id": ObjectId(req_id)})
+    if not req or req["status"] != "pending":
+        raise HTTPException(404, "Request not found or already decided")
+    await db.profile_change_requests.update_one(
+        {"_id": ObjectId(req_id)},
+        {"$set": {"status": "rejected", "admin_note": admin_note,
+                  "decided_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"ok": True}
+
+
+@api.get("/admin/members")
+async def admin_list_members(request: Request):
+    await _require_admin(request)
+    items = await db.users.find(
+        {"role": {"$ne": "admin"}}, {"password_hash": 0}
+    ).sort("created_at", -1).to_list(1000)
+    return {"items": [{**i, "_id": str(i["_id"])} for i in items]}
+
+
+# ---------- Email-based invite delivery ----------
+@api.post("/invites/send-email")
+async def send_invite_email(body: InviteEmailIn, request: Request):
+    """Send a previously-generated invite code via email to the invitee."""
+    user = await _current(request)
+    invite = await db.invites.find_one({"code": body.code.upper()})
+    if not invite:
+        raise HTTPException(404, "Invite not found")
+    # Only the creator (or admin) can email it
+    if invite.get("created_by") != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Not your invite")
+    if invite.get("used"):
+        raise HTTPException(400, "Invite already used")
+
+    referrer_name = user.get("name") or user.get("full_name") or "A member"
+    base = os.environ.get("FRONTEND_URL", "").rstrip("/")
+    link = f"{base}/invite/{body.code.upper()}"
+    html = invite_email_html(
+        invitee_name=body.invitee_name or "Friend",
+        referrer_name=referrer_name,
+        link=link,
+        code=body.code.upper(),
+        note=body.note or "",
+    )
+    result = await send_email(
+        to=body.invitee_email,
+        subject=f"{referrer_name} invited you to Stars Connection",
+        html=html,
+    )
+
+    # Track delivery on the invite record
+    await db.invites.update_one(
+        {"_id": invite["_id"]},
+        {"$set": {"emailed_to": body.invitee_email, "emailed_at": datetime.now(timezone.utc).isoformat(),
+                  "email_sent": result.get("ok", False)}}
+    )
+
+    if not result.get("ok"):
+        # Soft-fail: return helpful info but include the link so caller can share manually
+        return {"ok": False, "stub": result.get("stub", False),
+                "message": result.get("message", "Email not sent."),
+                "share_link": link}
+    return {"ok": True, "id": result.get("id"), "share_link": link}
 
 
 app.include_router(api)
