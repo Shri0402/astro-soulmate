@@ -61,7 +61,12 @@ async def seed_admin():
     elif not verify_password(admin_pwd, existing["password_hash"]):
         await db.users.update_one(
             {"email": admin_email},
-            {"$set": {"password_hash": hash_password(admin_pwd)}}
+            {"$set": {"password_hash": hash_password(admin_pwd), "profile_complete": True}}
+        )
+    elif not existing.get("profile_complete"):
+        await db.users.update_one(
+            {"email": admin_email},
+            {"$set": {"profile_complete": True}}
         )
 
 

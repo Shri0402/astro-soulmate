@@ -50,8 +50,25 @@ Pivot to **ULTRA-PRIVATE invite-only network**. Wipe all user data, import 11 na
   - 8 Interpretation paragraphs (canonical AstroSage texts for shown combos + score-tier fallbacks)
   - Disclaimer footer
 
-### Test pass rate (iteration_2.json)
-- Backend 100% (20/20) · Frontend 100% — no critical/UI/integration issues
+### v3 — Phase 3 Follow-ups (Apr 25 2026 evening)
+- **Expanded interpretation library** (~50 new (boy, girl) combos across all 8 gunas) — Brahmin/Kshatriya, Manav/Chatushpada, Horse/Buffalo, Sun/Moon Graha-Maitri, Aadi/Madhya pairs, etc.
+- **Lagna, Tithi, Karan, Yoga, Paksha, Nakshatra Lord, Lagna Lord, weekday** computed via pyswisseph and surfaced in birth_details (15-row table)
+- **Profile editing** with field-level policy:
+  - **Free edit** (`PATCH /api/profile`): bio, phone, birth_city, state, name
+  - **Admin approval required** (`POST /api/profile/change-request`): looking_for, dob, birth_time, gender — DOB & birth_time treated as immutable kundali identity
+  - Frontend `/profile` shows free-edit form + Lock icons + change-request form + history list
+- **Admin approval queue** (`/admin/change-requests` GET/approve/reject) + **Members directory** (`/admin/members`):
+  - Frontend `/admin` page for admin only (Crown icon in nav)
+  - Approving DOB/birth_time recomputes astro & regenerates matches
+  - Approving looking_for / gender regenerates matches
+- **Resend email integration** (`emailservice.py` + `POST /api/invites/send-email`):
+  - Provider abstraction (Resend default, SendGrid swap-friendly)
+  - Branded maroon/gold HTML invite email
+  - **Soft-fail** when `RESEND_API_KEY` empty → returns `{ok:false, stub:true, share_link}` so UX still works
+  - Frontend Invitations page now has "Email it" inline form (invitee_name + email + note)
+- Bug fix: admin user now seeded with `profile_complete=True` so Admin/Invitations routes are reachable
+
+### Test pass rate (iteration_4.json): Backend **39/39 (100%)**, Frontend **100%**
 
 ## 6. Backlog (next phases)
 
