@@ -14,7 +14,7 @@ export default function Onboarding() {
   const [form, setForm] = useState({
     name: user?.name || "",
     gender: "", looking_for: "",
-    dob: "", birth_time: "", birth_city: "Mumbai", bio: "",
+    dob: "", birth_time: "", birth_city: "Mumbai", state: "", phone: "", bio: "",
   });
   const [err, setErr] = useState(""); const [loading, setLoading] = useState(false);
   const up = (k, v) => setForm(f => ({ ...f, [k]: v }));
@@ -78,6 +78,12 @@ export default function Onboarding() {
                   {CITIES.map(c => <option key={c}>{c}</option>)}
                 </select>
               </L>
+              <L label="State (optional)">
+                <I value={form.state} onChange={v => up("state", v)} testid="ob-state" />
+              </L>
+              <L label="Phone (only shared with your consent)">
+                <I type="tel" value={form.phone} onChange={v => up("phone", v)} testid="ob-phone" />
+              </L>
             </>
           )}
           {step === 3 && (
@@ -123,7 +129,7 @@ function L({ label, children }) {
 }
 function I({ value, onChange, type = "text", testid }) {
   return (
-    <input type={type} required value={value} onChange={e => onChange(e.target.value)} data-testid={testid}
+    <input type={type} value={value} onChange={e => onChange(e.target.value)} data-testid={testid}
       className="w-full bg-[#2A0E18] border border-[#D4AF37]/20 px-4 py-3 text-[#F3E6C6] outline-none focus:border-[#D4AF37]" />
   );
 }

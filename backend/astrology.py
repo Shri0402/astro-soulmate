@@ -187,16 +187,17 @@ def compute_ashtakoota(a: dict, b: dict) -> dict:
     gunas["Vashya"] = {"score": vashya_score, "max": 2, "a": wa, "b": wb}
 
     # 3. Tara (3 pts) - based on count from A's nakshatra to B's
+    from report_interpretations import tara_name
     count_ab = ((b["nakshatra_idx"] - a["nakshatra_idx"]) % 27) + 1
     count_ba = ((a["nakshatra_idx"] - b["nakshatra_idx"]) % 27) + 1
-    # Auspicious taras: 2,4,6,8,9 (of 1-9 cycle). Bad: 1,3,5,7
     def tara_val(n):
         r = n % 9
         if r == 0:
             r = 9
         return 1.5 if r in {2, 4, 6, 8, 9} else 0
     tara_score = tara_val(count_ab) + tara_val(count_ba)
-    gunas["Tara"] = {"score": round(tara_score, 1), "max": 3}
+    gunas["Tara"] = {"score": round(tara_score, 1), "max": 3,
+                     "a": tara_name(count_ab), "b": tara_name(count_ba)}
 
     # 4. Yoni (4 pts) - same yoni=4, friendly=3, neutral=2, enemy=1, mortal=0
     ya = NAKSHATRA_YONI[a["nakshatra"]]

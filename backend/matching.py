@@ -18,12 +18,13 @@ async def generate_matches_for_user(db, user_id: str) -> int:
     # Remove prior matches
     await db.matches.delete_many({"user_id": user_id})
 
-    # Find candidates - opposite gender the user is looking for, reciprocal
+    # Strict filter: candidates whose gender matches the user's "looking_for".
+    # No reciprocity required (per ultra-private platform rules).
     candidates = await db.users.find({
         "_id": {"$ne": ObjectId(user_id)},
         "gender": looking_for,
-        "looking_for": user.get("gender"),
         "astro": {"$exists": True},
+        "role": {"$ne": "admin"},
     }).to_list(500)
 
     created = 0

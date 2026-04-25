@@ -1,0 +1,45 @@
+{
+  "summary": "Full E2E retest of Stars Connection v2 (PHASE 1+2 rewrite). Backend: 20/20 pytest cases PASS — invite-only registration + reuse-403, public invite validation, admin invite generation, login (DDMMYYYY passwords), strict gender filter (Shakuntala only sees males including Shubham who is male/looking_for=male — reciprocity removed), no paywall on /api/matches or /api/kundali/* or /pdf, AstroSage report shape (8 birth_details rows, 8 ashtakoota rows with boy/girl/max/obtained/area, mangal_dosha_text starting with Mr./Ms., conclusion, 8 interpretations), full phone-request consent flow (create→idempotent→inbox→stranger-cannot-accept→accept→phone revealed in kundali; reject path; cannot self-request), and security (no field-leak via /profile to escalate to admin or modify is_premium/is_private_member). Frontend: Landing → Login → Dashboard (7 strict-male matches for Shakuntala, no blur/lock overlays) → Kundali (all 9 testids present: kundali-report, birth-details-table, ashtakoota-table with 9 rows = 8 gunas+total, mangal-dosha, conclusion, phone-request-section with disclaimer text, 8 interpretation children, disclaimer, download-pdf-button) → /invitations (generate-invite works, copy button appears) → /inbox (page renders, items listed). /invite/INVALIDXYZ shows 'Invalid' message and submit disabled.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "backend/.env", "issue": "FRONTEND_URL points to a different preview host (0999bfac-...emergentagent.com) than REACT_APP_BACKEND_URL (astro-soulmate-4...). CORSMiddleware allow_origins is set to FRONTEND_URL only — same-origin ingress masks it today but cross-origin fetch with credentials would break. CORS_ORIGINS env var is defined but never read in server.py."},
+      {"endpoint": "/api/auth/me", "issue": "Returns 401 on landing/invite pages causing console error spam. Suggest guarding AuthContext bootstrap so it does not call /me on unauthenticated public routes."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All pages", "issues": ["Browser <title> still 'Emergent | Fullstack App' — should be 'Stars Connection' (carryover from iteration_1, not yet fixed)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_stars_v2.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Update /app/frontend/public/index.html <title> to 'Stars Connection' (carryover).",
+    "(Optional) Guard AuthContext bootstrap to skip /api/auth/me on public routes (/, /login, /invite/:code) to silence 401 console errors.",
+    "(Optional) Remove dead CORS_ORIGINS env var or actually read it; align FRONTEND_URL with REACT_APP_BACKEND_URL host."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 667 lines — close to the 700-line guideline; consider splitting Phone Requests + Invites + Payments into their own routers.",
+    "Strict gender filter implemented in matching.py without reciprocity — verified at API: Shubham (male, looking_for=male) correctly appears in Shakuntala's (female, looking_for=male) match list.",
+    "/api/auth/register stores hashed password via bcrypt and only honors whitelisted fields — is_premium/role/is_private_member cannot be injected from client (Pydantic RegisterIn does not include them). /api/profile likewise ignores extra fields — verified at runtime that /auth/me returns role='user' after attempted privilege injection.",
+    "/api/phone-requests has unique compound index on (requester_user_id, receiver_user_id) and the route correctly returns the existing record on duplicate POST — idempotent and verified.",
+    "/api/kundali/:id no longer enforces a 402 — paywall removed as required. PDF endpoint also returns 200 application/pdf for any score.",
+    "Mongo _id properly excluded across responses (find_one with projection or via _public_user serializer / str(ObjectId) cast).",
+    "Phone consent flow correctly gates phone reveal: kundali response only includes other.phone when an accepted phone_number_request exists for (current_user → match)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_stars_v2.py (created — comprehensive pytest covering 20 cases across auth/invites/matches/kundali/phone-requests/security)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Members: 123@gmail.com/02081998 (Shakuntala F→M), michaelanthonyssj5@gmail.com/07012000 (Michael M→F), shubhamneema011@gmail.com/11112005 (Shubham M→M); Admin: admin@starsconnection.com/Admin@Stars2026. All verified.",
+  "seed_data_creation": "Server seeds 11 private members + 1 admin on lifespan startup (seed_data.seed_demo_profiles). Tests created a few TEST_invitee_*@example.com users via valid invite codes (kept; no cleanup endpoint exists and they don't pollute matching since they have no profile completed).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite is /app/backend/tests/test_stars_v2.py — run with: pytest /app/backend/tests/test_stars_v2.py -v. All 20 tests pass against the live preview URL. Strict gender filter verified at API+UI. Phone consent flow verified end-to-end (create→accept reveals phone; reject hides it). Kundali AstroSage layout shape locked: 8 birth_details rows, 8 ashtakoota_table rows + total, 8 interpretations, mangal_dosha_text starts with Mr./Ms., conclusion_text non-empty. UI has full data-testid coverage across kundali, dashboard, invitations, inbox, login, and registration. Only minor non-blocking issues remain: stale browser <title> and noisy /api/auth/me 401 on public pages.",
+  "rca of the issue": "n/a — no critical bugs found this iteration."
+}

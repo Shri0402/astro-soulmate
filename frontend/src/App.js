@@ -10,6 +10,8 @@ import Onboarding from "./pages/Onboarding";
 import Waiting from "./pages/Waiting";
 import Dashboard from "./pages/Dashboard";
 import Kundali from "./pages/Kundali";
+import Inbox from "./pages/Inbox";
+import Invitations from "./pages/Invitations";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentCancel from "./pages/PaymentCancel";
 
@@ -38,10 +40,13 @@ function Shell() {
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<LoggedInRedirect><Login /></LoggedInRedirect>} />
         <Route path="/register" element={<LoggedInRedirect><Register /></LoggedInRedirect>} />
+        <Route path="/invite/:code" element={<LoggedInRedirect><Register /></LoggedInRedirect>} />
         <Route path="/onboarding" element={<Protected needsProfile={false}><Onboarding /></Protected>} />
         <Route path="/waiting" element={<Protected><Waiting /></Protected>} />
         <Route path="/dashboard" element={<Protected><Dashboard /></Protected>} />
         <Route path="/kundali/:matchId" element={<Protected><Kundali /></Protected>} />
+        <Route path="/inbox" element={<Protected><Inbox /></Protected>} />
+        <Route path="/invitations" element={<Protected><Invitations /></Protected>} />
         <Route path="/payment/success" element={<Protected><PaymentSuccess /></Protected>} />
         <Route path="/payment/cancel" element={<Protected><PaymentCancel /></Protected>} />
         <Route path="*" element={<Navigate to="/" replace />} />
